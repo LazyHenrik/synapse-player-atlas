@@ -1,0 +1,7 @@
+{$SYNAPSE_DOMAIN} {
+    encode zstd gzip
+    basic_auth {
+        import /etc/caddy/staff.caddy
+    }
+    reverse_proxy viewer:8787
+}

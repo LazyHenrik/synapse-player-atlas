@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Synapse · Player atlas</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" type="image/png" href="/synapse-logo.png" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <div class="brand" aria-label="Project Synapse player atlas">
+        <img
+          class="brand-mark"
+          src="/synapse-logo.png"
+          alt=""
+          width="40"
+          height="40"
+        />
+        <div>
+          <img
+            class="brand-wordmark"
+            src="/synapse-wordmark.webp"
+            alt="Project Synapse"
+          /><small>PLAYER ATLAS</small>
+        </div>
+      </div>
+      <div class="header-right">
+        <span id="source-label">READ-ONLY · MONOSUITE</span
+        ><button id="refresh" type="button">Refresh data ↻</button>
+      </div>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">THE PEOPLE BEHIND THE SERVER</p>
+          <h1>Who shares the same hours?</h1>
+          <p class="muted">
+            Explore shared time, player interactions, and the records behind
+            each connection.
+          </p>
+        </div>
+        <div class="live-status" id="live-status">
+          Loading collection status…
+        </div>
+      </section>
+      <section class="metrics" aria-label="Collection summary">
+        <div>
+          <span>Players in view</span><strong id="players-stat">—</strong>
+        </div>
+        <div><span>Connections</span><strong id="edges-stat">—</strong></div>
+        <div>
+          <span>Suggested clusters</span><strong id="clusters-stat">—</strong>
+        </div>
+        <div>
+          <span>Observed time coverage</span
+          ><strong id="coverage-stat">—</strong>
+        </div>
+      </section>
+      <div class="workspace">
+        <aside class="filters">
+          <form id="filters">
+            <p class="eyebrow">EXPLORE</p>
+            <h2>Time & connections</h2>
+            <div class="presets" aria-label="Time presets">
+              <button type="button" data-days="1">24h</button
+              ><button type="button" data-days="7" class="active">7 days</button
+              ><button type="button" data-days="30">30 days</button>
+            </div>
+            <label
+              >From <input id="start" type="datetime-local" required /></label
+            ><label
+              >Until <input id="end" type="datetime-local" required
+            /></label>
+            <p class="hint">
+              Times shown in your browser’s local timezone. Up to 90 days.
+            </p>
+            <fieldset>
+              <legend>Connection layers</legend>
+              <label class="check"
+                ><input
+                  type="checkbox"
+                  name="kind"
+                  value="presence"
+                  checked
+                /><span class="dot presence"></span>Co-presence</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="damage" /><span
+                  class="dot damage"
+                ></span
+                >Damage</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="death" /><span
+                  class="dot death"
+                ></span
+                >Kills &amp; deaths</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="radio" /><span
+                  class="dot radio"
+                ></span
+                >Radio</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="pm" /><span
+                  class="dot pm"
+                ></span
+                >Private messages</label
+              ><label class="check"
+                ><input
+                  type="checkbox"
+                  name="kind"
+                  value="communication"
+                /><span class="dot communication"></span>Other
+                communication</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="other" /><span
+                  class="dot other"
+                ></span
+                >Other gameplay</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="ban" /><span
+                  class="dot ban"
+                ></span
+                >Bans</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="note" /><span
+                  class="dot note"
+                ></span
+                >Notes</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="warning" /><span
+                  class="dot warning"
+                ></span
+                >Warnings</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="kick" /><span
+                  class="dot kick"
+                ></span
+                >Kicks</label
+              ><label class="check"
+                ><input type="checkbox" name="kind" value="blacklist" /><span
+                  class="dot blacklist"
+                ></span
+                >Blacklists</label
+              >
+            </fieldset>
+            <label
+              >Minimum shared minutes
+              <input
+                id="minimum"
+                type="number"
+                min="0"
+                max="129600"
+                step="1"
+                value="10"
+                required
+            /></label>
+            <label
+              >Edge emphasis
+              <select id="emphasis">
+                <option value="weight">Crowd-adjusted time</option>
+                <option value="minutes">Shared minutes</option>
+                <option value="jaccard">Share of observed time</option>
+              </select></label
+            >
+            <button class="primary" type="submit">
+              Apply filters <span>→</span>
+            </button>
+          </form>
+          <div class="reading-note">
+            <strong>Overlap is a starting point.</strong>
+            <p>
+              Being online together does not prove interaction, friendship, or
+              coordination. Cluster colors use co-presence only.
+            </p>
+            <p>
+              Administrative arrows run from the staff account to the subject.
+            </p>
+            <p>
+              Gameplay links mean both players are listed in the same log. Click
+              a link to inspect the records.
+            </p>
+          </div>
+        </aside>
+        <section class="graph-panel">
+          <div class="graph-heading">
+            <div>
+              <h2>The player network</h2>
+              <span class="hint"
+                >Drag a node · drag the background to pan · scroll to zoom</span
+              >
+            </div>
+            <button id="reset-view" type="button" aria-label="Reset graph view">
+              Fit view ⤢
+            </button>
+          </div>
+          <div id="notice" role="status"></div>
+          <div class="graph-wrap">
+            <svg
+              id="graph"
+              viewBox="0 0 960 640"
+              aria-label="Interactive player network"
+              role="img"
+            ></svg>
+            <div id="empty" hidden>
+              No connections in this range. Try a wider window or a lower
+              minimum.
+            </div>
+            <div id="loading" hidden>Reading observations…</div>
+          </div>
+          <div class="graph-footer">
+            <span><i class="dot presence"></i> Node size = observed time</span
+            ><span id="edge-summary"
+              >Select a player to explore their connections</span
+            >
+          </div>
+        </section>
+        <aside class="people-panel">
+          <div class="people-search">
+            <p class="eyebrow">PLAYER DIRECTORY</p>
+            <label for="search">Find a player in this view</label
+            ><input
+              id="search"
+              type="search"
+              placeholder="Name or Steam ID"
+              autocomplete="off"
+            />
+          </div>
+          <div id="directory" class="directory" aria-label="Players"></div>
+          <section id="detail" hidden>
+            <button id="clear-selection" type="button">← All players</button>
+            <div id="player-detail"></div>
+          </section>
+        </aside>
+      </div>
+      <section
+        id="log-explorer"
+        class="log-explorer"
+        aria-labelledby="log-title"
+      >
+        <div class="log-heading">
+          <div>
+            <p class="eyebrow">PLAYER-TO-PLAYER EVIDENCE</p>
+            <h2 id="log-title">Interaction log explorer</h2>
+            <p class="hint">
+              Uses the applied graph time window. Select one player, a pair, or
+              up to 20 people.
+            </p>
+            <p id="log-range" class="hint"></p>
+          </div>
+          <button id="log-clear" type="button">Clear players</button>
+        </div>
+        <div class="log-controls">
+          <div class="log-player-picker">
+            <label for="log-person-search"
+              >Add a player from the full collected directory</label
+            ><input
+              id="log-person-search"
+              type="search"
+              placeholder="Name, Steam ID, or player ID"
+              autocomplete="off"
+            />
+            <div id="log-player-options" class="log-player-options"></div>
+          </div>
+          <form id="log-filters">
+            <label
+              >Match participants<select id="log-match">
+                <option value="between">Between any two selected</option>
+                <option value="all">All selected in the same record</option>
+                <option value="any">Any selected player</option>
+              </select></label
+            >
+            <label
+              >Log type<select id="log-kind">
+                <option value="">All gameplay logs</option>
+                <option value="damage">Damage</option>
+                <option value="death">Kills & deaths</option>
+                <option value="radio">Radio</option>
+                <option value="pm">Private messages</option>
+                <option value="communication">Other communication</option>
+                <option value="other">Other categories</option>
+              </select></label
+            >
+            <label
+              >Message contains<input
+                id="log-text"
+                type="search"
+                maxlength="200"
+                placeholder="Weapon, command, or phrase"
+            /></label>
+            <button class="primary" type="submit">Find logs →</button>
+          </form>
+        </div>
+        <div
+          id="log-selected"
+          class="log-selected"
+          aria-label="Selected players"
+        ></div>
+        <p class="hint">
+          With one player selected, all of their linked records match. With none
+          selected, search covers all collected logs. Single-sender
+          communications do not establish an audience. Participant order does
+          not establish who attacked or addressed whom.
+        </p>
+        <div id="log-status" role="status" class="log-status">
+          Choose players or search all collected records.
+        </div>
+        <div id="log-results" class="log-results"></div>
+        <button id="log-more" type="button" hidden>Load more records</button>
+      </section>
+      <details class="health">
+        <summary>Collection & history status</summary>
+        <div id="health-detail"></div>
+        <p>
+          History is fetched in the background. Notes, warnings, and kicks are
+          available for discovered players; these endpoints do not promise
+          complete historical coverage. Ban pages are periodically rescanned to
+          pick up edits and pagination drift.
+        </p>
+      </details>
+    </main>
+    <footer>
+      Synapse / A view of shared time
+      <span>Read-only data · No administrative actions</span>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,37 @@
+# This folder holds more than the CLI, so the safe way round is to ignore
+# everything and then allow back the files that belong in the repo. Add a line
+# for anything new you want tracked.
+*
+
+!.gitignore
+!.dockerignore
+!LICENSE
+!README.md
+!requirements.txt
+!monosuite_cli.py
+!synapse/
+!synapse/**/
+!synapse/**/*.py
+!synapse/static/*
+!synapse/README.md
+!synapse/requirements.txt
+!synapse/schema.json
+!synapse/deploy/
+!synapse/deploy/*
+!synapse/deploy/.env.example
+synapse/deploy/secrets/
+!tests/
+!tests/*.py
+*.sqlite*
+*.log
+
+# Never track these, wherever they turn up.
+.monosuite_cli.json
+*.token
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+!CLI-README.md

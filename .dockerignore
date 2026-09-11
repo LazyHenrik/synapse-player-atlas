@@ -1,0 +1,10 @@
+*
+!requirements.txt
+!monosuite_cli.py
+!synapse/
+!synapse/**
+synapse/deploy/secrets
+synapse/deploy/.env
+**/__pycache__
+**/*.sqlite*
+**/*.token

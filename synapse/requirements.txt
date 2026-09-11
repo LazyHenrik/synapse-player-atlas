@@ -1,0 +1,4 @@
+-r ../requirements.txt
+graphql-core==3.2.12
+networkx==3.6.1
+waitress==3.0.2

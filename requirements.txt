@@ -1,0 +1,6 @@
+click>=8.0
+rich>=13.0
+
+# Optional. Needed for "auth login", which reads the dashboard session cookie
+# out of your browser. Without it you can still sign in with "auth set-token".
+# browser-cookie3>=0.19
