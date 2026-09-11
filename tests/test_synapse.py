@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from graphql import build_client_schema, parse, validate
-from monosuite_cli import AuthError, MonoSuiteClient
+from monosuite_cli import ApiError, AuthError, MonoSuiteClient
 
 from synapse.api import (
     INTROSPECTION,
@@ -346,8 +346,93 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(status, "200 OK")
         self.assertEqual(json.loads(body)["nodes"], [])
 
+    def test_restricted_kicks_preserve_existing_records_and_import_notes(self):
+        self.poll(0, "1")
+        with self.db:
+            self.db.execute("INSERT INTO settings VALUES ('group','g')")
+            self.db.execute("UPDATE jobs SET due=?", (T + 9999999,))
+            event(self.db, "kick", ban("old-kick"), "s", T)
+        row = player("1")
+        row.update(
+            notes=[dict(id="n", content="A note", createdAt=T, admin=player("2"))],
+            warnings=[],
+        )
+        source = Mock()
+        source.query.return_value = {
+            "server": {"player": row},
+            "unavailable_history": ["kicks"],
+        }
+        collector = Collector(self.path, "s")
+        collector.history_step(self.db, source, T)
+        self.assertEqual(
+            self.db.execute("SELECT count(*) FROM events WHERE kind='note'").fetchone()[
+                0
+            ],
+            1,
+        )
+        self.assertEqual(
+            self.db.execute("SELECT count(*) FROM events WHERE kind='kick'").fetchone()[
+                0
+            ],
+            1,
+        )
+        self.assertIn(
+            "moderation.kick",
+            self.db.execute("SELECT error FROM jobs WHERE name='kicks'").fetchone()[0],
+        )
+        self.assertIsNone(
+            self.db.execute("SELECT error FROM jobs WHERE name='player:1'").fetchone()[
+                0
+            ]
+        )
+        row["kicks"] = []
+        source.query.return_value = {"server": {"player": row}}
+        with self.db:
+            self.db.execute("UPDATE players SET history_due=0 WHERE id='1'")
+        collector.history_step(self.db, source, T + 1000)
+        self.assertIsNone(
+            self.db.execute("SELECT * FROM jobs WHERE name='kicks'").fetchone()
+        )
+        self.assertEqual(
+            self.db.execute("SELECT count(*) FROM events WHERE kind='kick'").fetchone()[
+                0
+            ],
+            1,
+        )
+
 
 class ApiTest(unittest.TestCase):
+    def test_kick_scope_fallback_is_explicit_and_rechecks_rotated_credential(self):
+        client = Mock(token="scoped-key")
+        limited = {"server": {"player": dict(notes=[], warnings=[])}}
+        client.execute.side_effect = [
+            ApiError("This credential is not scoped for: moderation.kick", []),
+            limited,
+            {"server": {"player": {}}},
+            {"server": {"player": {"kicks": []}}},
+        ]
+        source = Source(client)
+        result = source.query("player", server="s", value="1")
+        self.assertEqual(result["unavailable_history"], ["kicks"])
+        self.assertNotIn("kicks", result["server"]["player"])
+        source.query("player", server="s", value="2")
+        self.assertEqual(
+            client.execute.call_args.args[0], QUERIES["player_without_kicks"]
+        )
+        client.token = "replacement-key"
+        result = source.query("player", server="s", value="1")
+        self.assertEqual(client.execute.call_args.args[0], QUERIES["player"])
+        self.assertNotIn("unavailable_history", result)
+
+    def test_other_permission_failures_are_not_hidden(self):
+        client = Mock(token="scoped-key")
+        client.execute.side_effect = ApiError(
+            "This credential is not scoped for: moderation.note.view", []
+        )
+        with self.assertRaises(ApiError):
+            Source(client).query("player", server="s", value="1")
+        self.assertEqual(client.execute.call_count, 1)
+
     def test_mutations_and_side_effect_queries_blocked_before_transport(self):
         client = MonoSuiteClient(on_request=read_only)
         with patch.object(client, "_post") as post:

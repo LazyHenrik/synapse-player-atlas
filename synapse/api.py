@@ -4,7 +4,13 @@ from pathlib import Path
 from graphql import build_client_schema, get_introspection_query, parse, validate
 from graphql.language import OperationType, OperationDefinitionNode
 
-from monosuite_cli import AuthError, Config, MonoSuiteClient, token_from_browser
+from monosuite_cli import (
+    ApiError,
+    AuthError,
+    Config,
+    MonoSuiteClient,
+    token_from_browser,
+)
 
 PERSON = "id steamId profile { username }"
 ACTION = f"id reason createdAt user {{ {PERSON} }} admin {{ {PERSON} }} server {{ id }}"
@@ -36,6 +42,7 @@ QUERIES = {
         blacklists {{ {ACTION} value expire updatedAt }}
     }} }}""",
 }
+QUERIES["player_without_kicks"] = QUERIES["player"].replace(f"kicks {{ {ACTION} }}", "")
 INTROSPECTION = get_introspection_query(descriptions=False)
 ALLOWED = frozenset([*QUERIES.values(), INTROSPECTION])
 
@@ -70,6 +77,7 @@ def make_client():
 class Source:
     def __init__(self, client):
         self.client = client
+        self._kick_restricted_token = None
 
     def check_schema(self):
         schema = self.client.execute(INTROSPECTION)
@@ -81,6 +89,25 @@ class Source:
         return schema
 
     def query(self, name, **variables):
+        limited = name == "player" and self._kick_restricted_token == self.client.token
+        try:
+            result = self._execute(
+                "player_without_kicks" if limited else name, variables
+            )
+        except ApiError as exc:
+            if (
+                name != "player"
+                or str(exc) != "This credential is not scoped for: moderation.kick"
+            ):
+                raise
+            self._kick_restricted_token = self.client.token
+            result = self._execute("player_without_kicks", variables)
+            limited = True
+        if limited:
+            result["unavailable_history"] = ["kicks"]
+        return result
+
+    def _execute(self, name, variables):
         try:
             return self.client.execute(QUERIES[name], variables)
         except AuthError:

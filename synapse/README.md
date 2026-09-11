@@ -39,7 +39,7 @@ Credentials are resolved in this order:
 3. `MONOSUITE_TOKEN`.
 4. The CLI's saved token in `~/.monosuite_cli.json`, reread on refresh.
 
-A token provider does not manufacture a new login. A browser session must still be valid, or an external credential manager must replace the token file. Updating the environment of a shell does not update an already-running collector. For an unattended host, use the file provider and an established rotation process. API keys may make this simpler, but their compatibility needs to be verified first; see the integration section.
+A token provider does not manufacture a new login. For an unattended host, put a scoped MonoSuite API key in the token file. Keys with no expiry work with the existing client; browser tokens still require renewal. Updating the environment of a shell does not update an already-running collector. Replace the credential file atomically and restart the collector when rotating a still-valid key, because the client caches its current credential until expiry or an authentication failure.
 
 For a local Firefox session in PowerShell:
 
@@ -253,7 +253,11 @@ People can self-host this repository with their own MonoSuite server and credent
 
 Account approval grants access to all collected records, including PMs. The three requested OAuth read scopes do not create per-record restrictions in the local database. Atlas's approval list is independent of MonoSuite group roles; administrators must keep it current.
 
-The collector still uses its own credential through `MonoSuiteClient`. OAuth login does not renew that credential. The API-key settings describe keys that act as their creator, fixed scopes, configurable expiry including no expiry, and a secret shown once. Compatibility of those keys or application tokens with the CLI's GraphQL realm/header remains unverified. Do not request wildcard or mutation-capable permissions to make a failed read work.
+The collector uses its own API key through `MonoSuiteClient`. OAuth login verifies viewer identity and does not renew the collector credential. API keys act as their creator, have fixed scopes and configurable expiry (including no expiry), and show their secret once. Store the key only in the collector's private token file, never in browser JavaScript or a commit.
+
+Verified on 2026-09-11: a key with `moderation.logs`, `moderation.blacklist.view`, `moderation.note.view`, and `moderation.warning.view` works with the CLI's existing raw Authorization header and dashboard realm. Schema validation, server discovery, live presence, log categories, two paginated ban-history pages, blacklists, and sampled player histories were checked. A fixed historical log window returned the same 265 records with both the API key and the previous dashboard credential. Ban history reported 8,953 records and blacklists returned 1,672 with either credential. These are compatibility checks, not a guarantee that all history is complete.
+
+There is one permission trap: reading `player.kicks` requires `moderation.kick`, which also permits kicking players. Synapse does not need that permission. On that exact scope error it retries a validated query for notes and warnings without kicks, records the missing kick coverage, and shows a warning in the viewer. Existing kick records remain available but new kick history is not imported with this key. Other permission errors still fail the job; they are not converted into empty history. Credential replacement causes kick access to be checked again. No wildcard or mutation-capable scope is needed for the other verified reads. Application access tokens have not been verified for collection.
 
 ## Verification
 

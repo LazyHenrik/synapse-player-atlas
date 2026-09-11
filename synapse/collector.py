@@ -156,9 +156,10 @@ class Collector:
         ).fetchone()
         if player:
             try:
-                row = source.query(
+                result = source.query(
                     "player", server=self.server, value=player["steam_id"]
-                )["server"]["player"]
+                )
+                row = result["server"]["player"]
                 if not row or row["id"] != player["id"]:
                     raise ValueError("Player lookup did not match")
                 with db:
@@ -167,10 +168,23 @@ class Collector:
                         ("warnings", "warning"),
                         ("kicks", "kick"),
                     ]:
+                        if field == "kicks" and field in result.get(
+                            "unavailable_history", []
+                        ):
+                            db.execute(
+                                "INSERT INTO jobs(name,error) VALUES ('kicks',?) "
+                                "ON CONFLICT(name) DO UPDATE SET error=excluded.error",
+                                (
+                                    "New kick history unavailable: MonoSuite requires moderation.kick.",
+                                ),
+                            )
+                            continue
                         if not isinstance(row.get(field), list):
                             raise ValueError(f"Missing {field}")
                         for item in row[field]:
                             event(db, kind, item, self.server, now, subject=row)
+                        if field == "kicks":
+                            db.execute("DELETE FROM jobs WHERE name='kicks'")
                     db.execute(
                         "UPDATE players SET history_due=? WHERE id=?",
                         (now + self.history_interval, player["id"]),

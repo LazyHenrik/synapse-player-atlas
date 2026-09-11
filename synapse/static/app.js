@@ -121,7 +121,11 @@ async function load() {
       warnings.push(
         `${data.stats.hidden_edges} weaker edges hidden by the 5,000-edge display limit.`,
       );
-    if (data.jobs.some((j) => j.error))
+    if (data.jobs.some((j) => j.name === "kicks" && j.error))
+      warnings.push(
+        "New kick history is unavailable with this read-only key. Previously collected kicks remain visible.",
+      );
+    if (data.jobs.some((j) => j.name !== "kicks" && j.error))
       warnings.push(
         "Some history jobs are failing. See collection status below.",
       );
