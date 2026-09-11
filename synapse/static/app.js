@@ -101,9 +101,6 @@ async function load() {
     $("clusters-stat").textContent = data.stats.communities;
     $("coverage-stat").textContent =
       `${(data.stats.coverage * 100).toFixed(1)}%`;
-    $("source-label").textContent = data.demo
-      ? "SYNTHETIC DEMO · NO REAL PLAYERS"
-      : "READ-ONLY · MONOSUITE";
     const last = data.stats.latest_poll,
       age = Date.now() - (last.observed_at || 0);
     $("live-status").textContent = data.demo
@@ -198,6 +195,25 @@ function emphasis(edge) {
     ? Math.max(0.001, edge[$("emphasis").value])
     : edge.weight;
 }
+function strongestEdges(edges) {
+  const buckets = new Map();
+  for (const edge of edges) {
+    for (const id of [edge.source, edge.target]) {
+      const key = `${id}:${edge.kind}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(edge);
+    }
+  }
+  const keep = new Set();
+  for (const bucket of buckets.values())
+    bucket
+      .sort((a, b) => emphasis(b) - emphasis(a))
+      .slice(0, 3)
+      .forEach((edge) => keep.add(edge));
+  return keep;
+}
+let hovered = null,
+  viewTouched = false;
 function renderGraph() {
   cancelAnimationFrame(frame);
   const svg = $("graph");
@@ -218,6 +234,7 @@ function renderGraph() {
   }
   svg.append(defs);
   world = svgEl("g");
+  viewTouched = false;
   svg.append(world);
   updateTransform();
   $("empty").hidden = data.nodes.length > 0;
@@ -241,6 +258,17 @@ function renderGraph() {
     a: positions.get(e.source),
     b: positions.get(e.target),
   }));
+  const sparse = strongestEdges(edges);
+  for (const edge of edges) edge.strong = sparse.has(edge);
+  const springs = new Map();
+  for (const edge of sparse) {
+    const key = [edge.source, edge.target].sort().join(":");
+    if (edge.source !== edge.target) springs.set(key, edge);
+  }
+  const degrees = new Map();
+  for (const edge of springs.values())
+    for (const id of [edge.source, edge.target])
+      degrees.set(id, (degrees.get(id) || 0) + 1);
   const max = Math.max(1, ...edges.map(emphasis));
   for (const e of edges) {
     const width = 0.5 + 3 * Math.sqrt(emphasis(e) / max);
@@ -265,6 +293,7 @@ function renderGraph() {
     line.append(svgEl("title"));
     line.firstChild.textContent = description;
     line.addEventListener("click", () => {
+      if (dragMoved) return;
       $("edge-summary").textContent = description;
       if (!e.directed) openLogs([e.a, e.b], e.logs ? e.kind : "");
     });
@@ -287,8 +316,9 @@ function renderGraph() {
     });
     group.append(circle);
     const text = svgEl("text", { x: n.r + 5, y: 4 });
-    text.textContent = n.name.length > 22 ? n.name.slice(0, 21) + "…" : n.name;
+    text.textContent = n.name.length > 60 ? n.name.slice(0, 59) + "…" : n.name;
     group.append(text);
+    n.label = text;
     const title = svgEl("title");
     title.textContent = n.name;
     group.append(title);
@@ -299,9 +329,21 @@ function renderGraph() {
       }
     });
     group.addEventListener("pointerdown", (event) => beginDrag(event, n));
-    group.addEventListener("click", (event) => {
-      if (!dragMoved) showPlayer(n.id);
-      event.stopPropagation();
+    group.addEventListener("pointerenter", () => {
+      hovered = n.id;
+      updateLabels();
+    });
+    group.addEventListener("pointerleave", () => {
+      hovered = null;
+      updateLabels();
+    });
+    group.addEventListener("focus", () => {
+      hovered = n.id;
+      updateLabels();
+    });
+    group.addEventListener("blur", () => {
+      hovered = null;
+      updateLabels();
     });
     world.append(group);
     n.element = group;
@@ -320,7 +362,8 @@ function renderGraph() {
           let dx = a.x - b.x,
             dy = a.y - b.y;
           const d = Math.max(50, dx * dx + dy * dy);
-          const f = Math.min(1.5, 270 / d);
+          const f =
+            Math.min(5, 2200 / d) + Math.max(0, 65 - Math.sqrt(d)) * 0.04;
           a.vx += (dx * f) / Math.sqrt(d);
           a.vy += (dy * f) / Math.sqrt(d);
           if (!b.fixed) {
@@ -329,12 +372,13 @@ function renderGraph() {
           }
         }
       }
-      for (const e of edges) {
-        if (e.kind !== "presence") continue;
+      for (const e of springs.values()) {
         const dx = e.b.x - e.a.x,
           dy = e.b.y - e.a.y,
           d = Math.hypot(dx, dy) || 1;
-        const force = (d - 100) * 0.002;
+        const force =
+          ((d - 170) * 0.004) /
+          Math.sqrt(Math.max(degrees.get(e.source), degrees.get(e.target)));
         if (!e.a.fixed) {
           e.a.vx += (dx / d) * force;
           e.a.vy += (dy / d) * force;
@@ -346,14 +390,14 @@ function renderGraph() {
       }
       for (const n of positions.values()) {
         if (!n.fixed) {
-          n.x = Math.max(30, Math.min(900, n.x + n.vx));
-          n.y = Math.max(30, Math.min(600, n.y + n.vy));
+          n.x += n.vx;
+          n.y += n.vy;
           n.vx *= 0.8;
           n.vy *= 0.8;
         }
       }
       frame = requestAnimationFrame(tick);
-    } else if (step === 151 && !drag) {
+    } else if (step === 151 && !drag && !viewTouched) {
       fitGraph();
     }
     draw();
@@ -367,6 +411,7 @@ function renderGraph() {
     }
     for (const n of positions.values())
       n.element.setAttribute("transform", `translate(${n.x},${n.y})`);
+    updateLabels();
   }
   world._positions = positions;
   world._edges = edges;
@@ -380,6 +425,47 @@ function updateTransform() {
       "transform",
       `translate(${transform.x},${transform.y}) scale(${transform.k})`,
     );
+  updateLabels();
+}
+function updateLabels() {
+  if (!world?._positions) return;
+  const occupied = [];
+  const size = 12 / Math.sqrt(transform.k);
+  const nodes = [...world._positions.values()].sort(
+    (a, b) =>
+      Number(b.id === hovered || b.id === selected) -
+        Number(a.id === hovered || a.id === selected) || b.minutes - a.minutes,
+  );
+  for (const node of nodes) {
+    node.label.style.fontSize = `${size}px`;
+    node.label.style.strokeWidth = `${3 / transform.k}px`;
+    const x = transform.x + (node.x + node.r + 5) * transform.k;
+    const y = transform.y + node.y * transform.k;
+    const box = [
+      x,
+      y - size * transform.k,
+      x + node.label.textContent.length * size * transform.k * 0.59,
+      y + 6,
+    ];
+    const priority = node.id === hovered || node.id === selected;
+    const overlaps = occupied.some(
+      (other) =>
+        box[0] < other[2] + 6 &&
+        box[2] > other[0] - 6 &&
+        box[1] < other[3] + 4 &&
+        box[3] > other[1] - 4,
+    );
+    const visible =
+      priority ||
+      (!node.element.classList.contains("dim") &&
+        !overlaps &&
+        box[0] < 960 &&
+        box[2] > 0 &&
+        box[1] < 640 &&
+        box[3] > 0);
+    node.label.style.visibility = visible ? "visible" : "hidden";
+    if (visible) occupied.push(box);
+  }
 }
 function fitGraph() {
   if (!world || !world._positions.size) return;
@@ -413,10 +499,11 @@ function beginDrag(event, node) {
     y: node ? node.y : transform.y,
   };
   dragMoved = false;
+  viewTouched = true;
   $("graph").setPointerCapture(event.pointerId);
 }
 $("graph").addEventListener("pointerdown", (event) => {
-  if (event.target === $("graph")) beginDrag(event, null);
+  if (!event.target.closest(".node")) beginDrag(event, null);
 });
 $("graph").addEventListener("pointermove", (event) => {
   if (!drag) return;
@@ -448,9 +535,10 @@ $("graph").addEventListener(
     event.preventDefault();
     const p = point(event),
       old = transform.k;
+    viewTouched = true;
     transform.k = Math.max(
       0.35,
-      Math.min(4, old * Math.exp(-event.deltaY * 0.001)),
+      Math.min(12, old * Math.exp(-event.deltaY * 0.001)),
     );
     transform.x = p.x - ((p.x - transform.x) * transform.k) / old;
     transform.y = p.y - ((p.y - transform.y) * transform.k) / old;
@@ -475,7 +563,21 @@ function highlight() {
       "dim",
       !!selected && e.source !== selected && e.target !== selected,
     );
+  let visible = 0;
+  for (const edge of world._edges) {
+    const show =
+      $("network-density").value === "all" ||
+      edge.strong ||
+      edge.source === selected ||
+      edge.target === selected;
+    edge.element.style.display = show ? "" : "none";
+    if (show) visible++;
+  }
+  $("network-count").textContent =
+    `${visible.toLocaleString()} of ${data.edges.length.toLocaleString()} available links · comparison totals use all collected records`;
+  updateLabels();
 }
+$("network-density").addEventListener("change", highlight);
 async function showPlayer(id) {
   selected = id;
   highlight();
@@ -624,7 +726,97 @@ function addLogPlayer(player) {
   $("log-player-options").replaceChildren();
   $("log-person-search").value = "";
   ++playerSearchRequest;
-  if (logsOpened) loadLogs();
+  if (logsOpened || logPlayers.size >= 2) loadLogs();
+}
+function renderComparison(result) {
+  const host = $("comparison-summary");
+  host.replaceChildren();
+  if (!result.summary) return;
+  const summary = result.summary;
+  host.append(
+    el("h3", `${result.total.toLocaleString()} matching log records`),
+  );
+  const types = el("div", undefined, "log-participants");
+  for (const item of summary.by_kind)
+    types.append(
+      el(
+        "span",
+        `${item.kind === "death" ? "Kills / deaths" : item.kind} · ${item.count.toLocaleString()}`,
+        "comparison-kind",
+      ),
+    );
+  host.append(types);
+  if (!summary.pairs.length) {
+    host.append(
+      el(
+        "p",
+        "Select two or more players to compare shared time and linked records.",
+        "hint",
+      ),
+    );
+    return;
+  }
+  host.append(
+    el(
+      "p",
+      `${summary.together_minutes.toFixed(1)} minutes with all ${logPlayers.size} selected players online together · ${(summary.presence_coverage * 100).toFixed(1)}% presence coverage. Shared time uses the full time range; record counts follow the log filters.`,
+      "hint",
+    ),
+  );
+  const table = el("table", undefined, "comparison-table");
+  const head = el("thead"),
+    headings = el("tr");
+  for (const label of [
+    "Player pair",
+    "Shared minutes",
+    "Linked records",
+    "By type",
+    "",
+  ])
+    headings.append(el("th", label));
+  head.append(headings);
+  table.append(head);
+  const body = el("tbody");
+  for (const pair of summary.pairs) {
+    const a = logPlayers.get(pair.source),
+      b = logPlayers.get(pair.target);
+    const row = el("tr");
+    row.append(
+      el("td", `${a?.name || pair.source} ↔ ${b?.name || pair.target}`),
+      el("td", pair.shared_minutes.toFixed(1)),
+      el("td", pair.records.toLocaleString()),
+      el(
+        "td",
+        Object.entries(pair.by_kind)
+          .map(([kind, count]) => `${kind}: ${count}`)
+          .join(" · ") || "No matching records",
+      ),
+    );
+    const action = el("td"),
+      button = el("button", "View records");
+    button.type = "button";
+    button.disabled = !pair.records;
+    button.addEventListener("click", () => {
+      logPlayers.clear();
+      logPlayers.set(a.id, a);
+      logPlayers.set(b.id, b);
+      $("log-match").value = "between";
+      renderLogPlayers();
+      loadLogs();
+    });
+    action.append(button);
+    row.append(action);
+    body.append(row);
+  }
+  table.append(body);
+  host.append(table);
+  host.append(
+    el(
+      "p",
+      "Counts are log records, not unique actions. A record involving three people appears in three pair totals. Shared time alone does not establish an interaction; missing records do not establish that none occurred.",
+      "hint",
+    ),
+  );
 }
 function openLogs(players, kind = "") {
   logPlayers.clear();
@@ -702,11 +894,13 @@ async function loadLogs(more = false) {
     lastLogQuery = query.toString();
     logCursor = null;
     $("log-results").replaceChildren();
+    $("comparison-summary").replaceChildren();
   }
   $("log-status").textContent = "Reading collected logs…";
   try {
     const result = await read("/api/logs?" + query);
     if (number !== logRequest) return;
+    if (!more) renderComparison(result);
     for (const row of result.logs) $("log-results").append(renderLog(row));
     logCursor = result.next;
     $("log-more").hidden = !logCursor;
@@ -725,6 +919,7 @@ function invalidateLogs() {
   logCursor = null;
   $("log-more").hidden = true;
   $("log-results").replaceChildren();
+  $("comparison-summary").replaceChildren();
   $("log-status").textContent = "Filters changed. Select Find logs to search.";
 }
 $("log-filters").addEventListener("submit", (event) => {
@@ -805,24 +1000,26 @@ document.querySelectorAll("[data-days]").forEach((b) =>
   }),
 );
 preset(7);
-read("/auth/session").then((session) => {
-  if (!session.enabled) return;
-  const button = $("sign-out");
-  button.hidden = false;
-  button.title = `Signed in as ${session.name}`;
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    try {
-      const response = await fetch("/auth/logout", {
-        method: "POST",
-        headers: { "X-CSRF-Token": session.csrf },
-      });
-      if (!response.ok) throw new Error("Sign-out failed");
-      window.location.assign("/");
-    } catch {
-      button.textContent = "Retry sign out";
-      button.disabled = false;
-    }
-  });
-}).catch(() => {});
+read("/auth/session")
+  .then((session) => {
+    if (!session.enabled) return;
+    const button = $("sign-out");
+    button.hidden = false;
+    button.title = `Signed in as ${session.name}`;
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch("/auth/logout", {
+          method: "POST",
+          headers: { "X-CSRF-Token": session.csrf },
+        });
+        if (!response.ok) throw new Error("Sign-out failed");
+        window.location.assign("/");
+      } catch {
+        button.textContent = "Retry sign out";
+        button.disabled = false;
+      }
+    });
+  })
+  .catch(() => {});
 load();

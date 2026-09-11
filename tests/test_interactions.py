@@ -13,7 +13,7 @@ from synapse.interactions import (
     search_players,
 )
 from synapse.log_collector import collect_log_step
-from synapse.storage import initialize, person
+from synapse.storage import initialize, person, save_poll, save_failure
 from synapse.web import create_app
 
 T = 1788000000
@@ -75,6 +75,7 @@ class InteractionTest(unittest.TestCase):
             classify("Communication", prefix + '"/ic" someone mentioned /pm'),
             "communication",
         )
+
         self.assertEqual(
             classify("Communication", "someone wrote /radio hello"), "communication"
         )
@@ -86,6 +87,66 @@ class InteractionTest(unittest.TestCase):
             ),
             "communication",
         )
+
+    def test_comparison_counts_all_matching_records_without_pagination_bias(self):
+        self.save(record("ab", ("a", "b")))
+        self.save(record("abc", ("a", "b", "c")))
+        self.save(record("ac", ("a", "c"), category="Communication"))
+        self.save(record("single", ("b",)))
+        result = self.search(players=["a", "b", "c"], limit=1)
+        self.assertEqual(result["total"], 3)
+        pairs = {(p["source"], p["target"]): p for p in result["summary"]["pairs"]}
+        self.assertEqual(pairs["a", "b"]["records"], 2)
+        self.assertEqual(pairs["a", "c"]["by_kind"], {"damage": 1, "communication": 1})
+        self.assertEqual(pairs["b", "c"]["records"], 1)
+        self.assertIsNone(
+            self.search(players=["a", "b", "c"], before=result["next"])["summary"]
+        )
+        group = self.search(players=["a", "b", "c"], match="all")
+        self.assertEqual(group["total"], 1)
+        self.assertTrue(all(p["records"] == 1 for p in group["summary"]["pairs"]))
+        filtered = self.search(players=["a", "b", "c"], kinds={"communication"})
+        self.assertEqual(sum(p["records"] for p in filtered["summary"]["pairs"]), 1)
+        self.assertEqual(
+            self.search(players=["a", "b"], text="not present")["summary"]["pairs"][0][
+                "records"
+            ],
+            0,
+        )
+
+    def test_comparison_shared_time_clips_window_and_excludes_failed_polls(self):
+        for minute, members in [
+            (0, ("a", "b")),
+            (1, ("a", "b")),
+            (2, ("a", "b", "c")),
+            (3, ("a", "b", "c")),
+            (5, ("a", "b", "c")),
+        ]:
+            stamp = (T + minute * 60) * 1000
+            save_poll(
+                self.db,
+                stamp // 60000,
+                stamp,
+                {
+                    "isOnline": True,
+                    "onlinePlayers": [
+                        {"id": p, "profile": {"username": p}} for p in members
+                    ],
+                },
+            )
+        failed = (T + 240) * 1000
+        save_failure(self.db, failed // 60000, failed, "Timeout")
+        summary = explore_logs(
+            self.db, T * 1000, (T + 360) * 1000, players=["a", "b", "c"]
+        )["summary"]
+        pairs = {(p["source"], p["target"]): p for p in summary["pairs"]}
+        self.assertEqual(pairs["a", "b"]["shared_minutes"], 3)
+        self.assertEqual(summary["together_minutes"], 1)
+        self.assertEqual(summary["presence_coverage"], 0.5)
+        clipped = explore_logs(self.db, T * 1000, (T + 30) * 1000, players=["a", "b"])[
+            "summary"
+        ]
+        self.assertEqual(clipped["together_minutes"], 0.5)
 
     def test_seconds_only_scope_and_transactional_memberships(self):
         self.save(record())

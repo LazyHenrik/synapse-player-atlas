@@ -1,4 +1,5 @@
 import collections
+import itertools
 import re
 
 from .api import timestamp_ms
@@ -159,6 +160,62 @@ def explore_logs(
     total = db.execute("SELECT count(*) FROM logs l WHERE " + where, values).fetchone()[
         0
     ]
+    summary = None
+    if before is None:
+        summary = {
+            "by_kind": [
+                dict(row)
+                for row in db.execute(
+                    "SELECT l.kind,count(*) AS count FROM logs l WHERE "
+                    + where
+                    + " GROUP BY l.kind ORDER BY count(*) DESC",
+                    values,
+                )
+            ],
+            "pairs": [],
+        }
+        if len(players) >= 2:
+            shared, together, covered = shared_time(db, start, end, players)
+            marks = ",".join("?" for _ in players)
+            pair_rows = db.execute(
+                "SELECT a.player_id AS source,b.player_id AS target,l.kind,count(*) AS count,"
+                "count(DISTINCT l.created_at/86400000) AS days,min(l.created_at) AS first,max(l.created_at) AS last "
+                "FROM logs l JOIN log_participants a ON a.log_id=l.id "
+                "JOIN log_participants b ON b.log_id=l.id AND a.player_id<b.player_id "
+                "WHERE "
+                + where
+                + f" AND a.player_id IN ({marks}) AND b.player_id IN ({marks}) "
+                "GROUP BY a.player_id,b.player_id,l.kind",
+                values + players + players,
+            )
+            pairs = {
+                pair: {
+                    "source": pair[0],
+                    "target": pair[1],
+                    "shared_minutes": round(shared[pair] / 60, 2),
+                    "records": 0,
+                    "by_kind": {},
+                }
+                for pair in itertools.combinations(sorted(players), 2)
+            }
+            for row in pair_rows:
+                pair = pairs[row["source"], row["target"]]
+                pair["records"] += row["count"]
+                pair["by_kind"][row["kind"]] = row["count"]
+                pair["last"] = max(pair.get("last", 0), row["last"])
+            summary.update(
+                pairs=sorted(
+                    pairs.values(),
+                    key=lambda p: (
+                        -p["records"],
+                        -p["shared_minutes"],
+                        p["source"],
+                        p["target"],
+                    ),
+                ),
+                together_minutes=round(together / 60, 2),
+                presence_coverage=covered / ((end - start) / 1000),
+            )
     if before:
         where += " AND (l.created_at<? OR (l.created_at=? AND l.id<?))"
         values.extend([before[0], before[0], before[1]])
@@ -193,7 +250,53 @@ def explore_logs(
         status=log_status(db, start, end),
         players=players,
         match=match,
+        summary=summary,
     )
+
+
+def shared_time(db, start, end, players):
+    """Measure selected players directly, without graph limits or minimum-edge filters."""
+    interval = (
+        int(db.execute("SELECT value FROM settings WHERE key='interval'").fetchone()[0])
+        * 1000
+    )
+    polls = list(
+        db.execute(
+            "SELECT slot,observed_at,ok FROM polls WHERE observed_at>=? AND observed_at<=? ORDER BY slot",
+            (start - interval * 2, end + interval * 2),
+        )
+    )
+    rosters = collections.defaultdict(set)
+    chosen = set(players)
+    if polls:
+        marks = ",".join("?" for _ in chosen)
+        for row in db.execute(
+            f"SELECT slot,player_id FROM presence WHERE slot BETWEEN ? AND ? AND player_id IN ({marks})",
+            [polls[0]["slot"], polls[-1]["slot"], *sorted(chosen)],
+        ):
+            rosters[row["slot"]].add(row["player_id"])
+    pairs = collections.Counter()
+    together = covered = 0
+    for left, right in zip(polls, polls[1:]):
+        delta = right["observed_at"] - left["observed_at"]
+        if (
+            not left["ok"]
+            or not right["ok"]
+            or right["slot"] != left["slot"] + 1
+            or not 0 < delta <= interval * 1.5
+        ):
+            continue
+        seconds = (
+            max(0, min(end, right["observed_at"]) - max(start, left["observed_at"]))
+            / 1000
+        )
+        covered += seconds
+        common = rosters[left["slot"]] & rosters[right["slot"]]
+        for pair in itertools.combinations(sorted(common), 2):
+            pairs[pair] += seconds
+        if chosen <= common:
+            together += seconds
+    return pairs, together, covered
 
 
 def interaction_edges(db, start, end, kinds):

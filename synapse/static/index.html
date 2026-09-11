@@ -28,14 +28,12 @@
       </div>
       <div class="header-right">
         <button id="sign-out" type="button" hidden>Sign out</button>
-        <span id="source-label">READ-ONLY · MONOSUITE</span
-        ><button id="refresh" type="button">Refresh data ↻</button>
+        <button id="refresh" type="button">Refresh data ↻</button>
       </div>
     </header>
     <main>
       <section class="intro">
         <div>
-          <p class="eyebrow">THE PEOPLE BEHIND THE SERVER</p>
           <h1>Who shares the same hours?</h1>
           <p class="muted">
             Explore shared time, player interactions, and the records behind
@@ -196,6 +194,16 @@
             </button>
           </div>
           <div id="notice" role="status"></div>
+          <div class="network-controls">
+            <label
+              >Connections shown
+              <select id="network-density">
+                <option value="3">Strongest 3 per player, per layer</option>
+                <option value="all">All available connections</option>
+              </select>
+            </label>
+            <span id="network-count" class="hint"></span>
+          </div>
           <div class="graph-wrap">
             <svg
               id="graph"
@@ -306,6 +314,11 @@
         <div id="log-status" role="status" class="log-status">
           Choose players or search all collected records.
         </div>
+        <div
+          id="comparison-summary"
+          class="comparison-summary"
+          aria-live="polite"
+        ></div>
         <div id="log-results" class="log-results"></div>
         <button id="log-more" type="button" hidden>Load more records</button>
       </section>
@@ -320,9 +333,5 @@
         </p>
       </details>
     </main>
-    <footer>
-      Synapse / A view of shared time
-      <span>Read-only data · No administrative actions</span>
-    </footer>
   </body>
 </html>

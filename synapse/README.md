@@ -4,6 +4,14 @@ Synapse collects who is online, estimates shared time, and overlays gameplay int
 
 This is ready to run locally or as one private, shared staff application on a Linux server. The Docker deployment includes HTTPS and individual staff passwords. Optional MonoSuite sign-in uses an explicit staff approval list. This is not a public player directory or a multi-tenant service. The application integration findings and the next steps are below.
 
+## Compare players
+
+Add two to twenty players in the log explorer. The comparison table shows matching record totals by type for every pair, shared minutes, and the time all selected players were online together. Record counts follow the log type, text, and participant-match filters; shared time uses the applied time window. The table reads the stored observations directly, so graph node limits, hidden links, and the minimum shared-minutes filter do not discard comparison results. Select “View records” to inspect a pair with the current type and text filters.
+
+These are raw log-record counts, not counts of unique actions. MonoSuite can record the same communication through multiple logging paths. A record containing three players contributes to each of its three pair totals. There is no reliable source correlation ID here to deduplicate those into actions. Radio or PM records containing only a sender cannot establish who received them.
+
+The graph initially draws the strongest three links per player in each selected layer. Select “All available connections” to restore the full returned graph, or select a player to reveal their available links. This changes the drawing only. Names avoid overlapping in the overview; zooming reveals more names and increases their displayed size, while hovering or selecting a node always shows its name. Cluster colours still describe co-presence, not a claim of friendship.
+
 ## Try the viewer
 
 The viewer follows [Project: Synapse](https://project-synapse.com/)'s charcoal-and-white palette, uppercase typography, and outlined controls. The bundled lambda icon and wordmark come from the site's public `assets/images/navbar-icon.png` and `assets/images/title.webp` files. They are Project: Synapse branding, not covered by this repository's code license. Other communities should replace these assets with their own branding. The interface uses system sans-serif fonts rather than redistributing the site's DIN font.
