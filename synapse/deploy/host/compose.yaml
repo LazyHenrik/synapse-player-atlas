@@ -1,0 +1,30 @@
+name: web-proxy
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - ./secrets:/etc/caddy/secrets:ro
+      - certificates:/data
+      - configuration:/config
+    networks:
+      - synapse
+    mem_limit: 256m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+networks:
+  synapse:
+    external: true
+    name: synapse_web
+volumes:
+  certificates:
+  configuration:

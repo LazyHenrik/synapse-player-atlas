@@ -1,0 +1,7 @@
+atlas.example.com {
+	encode zstd gzip
+	basic_auth {
+		import /etc/caddy/secrets/synapse-users.caddy
+	}
+	reverse_proxy synapse-viewer:8787
+}

@@ -161,6 +161,8 @@ The existing CLI helpers include some stale field selections. Synapse builds a s
 
 ## Put it on a web server
 
+For a VPS that also hosts unrelated applications, use the [shared-host deployment](deploy/host/README.md). It runs one host-wide proxy and separate application stacks.
+
 For a single community with several staff users, start with a small Linux VM: roughly two CPU cores, 2–4 GB RAM, and an SSD volume is a reasonable starting estimate, not a load-tested requirement. Run the supplied Compose stack. Choose a region near your staff and MonoSuite. Budget for backups as well as the VM.
 
 | Choice | Fit |
@@ -208,7 +210,7 @@ docker compose ps
 docker compose logs --tail 50 collector
 ```
 
-The one-time initialization service creates the database. The collector runs continuously with restart-on-failure behavior; the viewer runs behind the proxy and mounts the data volume read-only. Container logs rotate. Credentials are mounted only into the collector. The mounted credential *directory* permits atomic file replacement during rotation; the token provider rereads the file on refresh. Preserve UID 10001 access when replacing it. Never copy credentials into the image.
+The one-time initialization service creates the database. The collector runs continuously with restart-on-failure behavior; the viewer runs behind the proxy and opens SQLite with `mode=ro` and `query_only=ON`. Its data-directory mount permits SQLite to create WAL coordination files when no collector is connected; mounting that directory read-only prevents a fresh or stopped-collector database from opening on Linux. The viewer has no write API and no MonoSuite credentials, but its filesystem mount is not a separate write-protection boundary. Container logs rotate. Credentials are mounted only into the collector. The mounted credential *directory* permits atomic file replacement during rotation; the token provider rereads the file on refresh. Preserve UID 10001 access when replacing it. Never copy credentials into the image.
 
 For additional staff, add another hash line and reload Caddy. Remove a line to revoke that staff login:
 
@@ -268,4 +270,4 @@ node --check synapse/static/app.js
 
 The 37 tests exercise gameplay timestamp units, pair/group matching, sender-only records, command classification, same-second local pagination, literal searches, adaptive window splitting, truncation warnings, retries, replay, version 1 migration, read-only enforcement before transport, schema compatibility, token-file rotation, GraphQL authentication refresh, transactional/idempotent writes, failure gaps, time-window clipping, weighting, server scope, history edits, interrupted pagination, duplicate pages, collector locking, and HTTP validation.
 
-Live smoke checks used the configured America server, which was offline with an empty roster at the time. They fetched multiple historical ban pages, notes, warnings, and 1,673 blacklist records. This verifies those reads and storage paths, not weeks of operation or complete history. A bounded live gameplay import stored 33 records and validated the new query against the live schema. The synthetic browser check covers a populated graph, player detail, gameplay layers, multi-person log filters, and pagination. Docker is not installed in the development environment, so the Linux container/TLS deployment must still be smoke-tested on its target host.
+Live smoke checks used the configured America server, which was offline with an empty roster at the time. They fetched multiple historical ban pages, notes, warnings, and 1,673 blacklist records. This verifies those reads and storage paths, not weeks of operation or complete history. A bounded live gameplay import stored 33 records and validated the new query against the live schema. The synthetic browser check covers a populated graph, player detail, gameplay layers, multi-person log filters, and pagination. The shared-host Docker deployment was built and its 37 tests passed on an Ubuntu 26.04 VPS. Public-domain TLS still needs verification after a domain is configured.

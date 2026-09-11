@@ -35,3 +35,8 @@ venv/
 .env
 
 !CLI-README.md
+
+!synapse/deploy/host/
+!synapse/deploy/host/**
+**/secrets/
+synapse/deploy/host/sites/

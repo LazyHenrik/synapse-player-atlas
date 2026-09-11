@@ -1,0 +1,5 @@
+:80 {
+	respond "No application is configured for this address." 404
+}
+
+import /etc/caddy/sites/*.caddy

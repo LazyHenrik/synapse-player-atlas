@@ -8,3 +8,7 @@ synapse/deploy/.env
 **/__pycache__
 **/*.sqlite*
 **/*.token
+
+**/secrets
+**/.env
+synapse/deploy/host/sites
