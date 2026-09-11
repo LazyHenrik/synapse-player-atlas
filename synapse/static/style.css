@@ -655,6 +655,7 @@ footer {
 }
 .edge {
   cursor: pointer;
+  vector-effect: non-scaling-stroke;
 }
 .network-controls {
   display: flex;
