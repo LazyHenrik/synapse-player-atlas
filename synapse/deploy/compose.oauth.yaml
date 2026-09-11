@@ -1,0 +1,11 @@
+services:
+  viewer:
+    environment:
+      SYNAPSE_OAUTH_CONFIG: /run/oauth/client.json
+      SYNAPSE_AUTH_DB: /auth/sessions.sqlite
+    volumes:
+      - ./secrets/oauth:/run/oauth:ro
+      - authentication:/auth
+
+volumes:
+  authentication:

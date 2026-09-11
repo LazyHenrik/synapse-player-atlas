@@ -42,6 +42,10 @@ ssh -N -L 8790:127.0.0.1:8787 ubuntu@YOUR_VPS_IP
 
 Open http://127.0.0.1:8790 on that computer. The SSH tunnel provides access control; port 8787 is not publicly exposed. Choose another local port if 8790 is occupied.
 
+## Enable MonoSuite sign-in
+
+Follow [the OAuth deployment guide](../OAUTH.md). It adds a separate credential mount and session volume to the viewer, with an explicit staff approval list. Set `SYNAPSE_REQUIRE_AUTH=true` and include `-f compose.oauth.yaml` alongside `-f compose.shared.yaml` in subsequent application operations. Collection and other hosted applications are unaffected.
+
 ## Give Synapse its domain
 
 Point the domain's DNS A record at the VPS. Only add an AAAA record if IPv6 routing and the firewall have also been checked. Allow inbound TCP 80 and 443.

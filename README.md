@@ -20,7 +20,7 @@ Open http://127.0.0.1:8787 after demo generation finishes. The demo contains fic
 
 See the [setup, interpretation, and deployment guide](synapse/README.md) for credentials, real collection, weighting, API traps, backups, and the supplied Docker/Caddy deployment. The stack supports a private shared staff website with HTTPS. Each authorized staff login can access all collected content, including private messages.
 
-MonoSuite OAuth sign-in is not implemented. The guide records the application/API-key investigation and the remaining integration work. The shared-host Docker deployment has been built and tested on Ubuntu 26.04; public-domain TLS still needs verification after DNS is configured.
+Optional [MonoSuite sign-in](synapse/deploy/OAUTH.md) protects the viewer with an explicit staff approval list, server-side sessions, and token refresh. The shared-host Docker deployment has been built and tested on Ubuntu 26.04; public-domain TLS still needs verification after DNS is configured.
 
 ## Verify
 

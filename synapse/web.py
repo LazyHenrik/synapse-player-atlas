@@ -43,6 +43,8 @@ def create_app(path):
         if environ["REQUEST_METHOD"] != "GET":
             return respond("405 Method Not Allowed", {"error": "Read only"})
         route = environ.get("PATH_INFO", "/")
+        if route == "/auth/session":
+            return respond("200 OK", {"enabled": False})
         assets = {
             "/": ("index.html", "text/html; charset=utf-8"),
             "/app.js": ("app.js", "text/javascript; charset=utf-8"),

@@ -1,8 +1,8 @@
 # Synapse player atlas
 
-Synapse collects who is online, estimates shared time, and overlays gameplay interactions and administrative history on an interactive player graph. It is a Python collector plus a browser application. Both use the same SQLite database. The viewer has no MonoSuite credentials and never calls MonoSuite.
+Synapse collects who is online, estimates shared time, and overlays gameplay interactions and administrative history on an interactive player graph. It is a Python collector plus a browser application. Both use the same SQLite database. The optional login gateway holds its own OAuth credentials and calls MonoSuite to verify sessions. The viewer never receives the collector credential.
 
-This is ready to run locally or as one private, shared staff application on a Linux server. The Docker deployment includes HTTPS and individual staff passwords. It is not a public player directory or a multi-tenant service, and MonoSuite OAuth login is not implemented. The application integration findings and the next steps are below.
+This is ready to run locally or as one private, shared staff application on a Linux server. The Docker deployment includes HTTPS and individual staff passwords. Optional MonoSuite sign-in uses an explicit staff approval list. This is not a public player directory or a multi-tenant service. The application integration findings and the next steps are below.
 
 ## Try the viewer
 
@@ -241,25 +241,11 @@ People can self-host this repository with their own MonoSuite server and credent
 
 ## MonoSuite applications and API keys
 
-The signed-in [API key settings](https://monosuite.com/settings/api-keys) and [application settings](https://monosuite.com/settings/applications) were inspected on 2026-09-10 without submitting either form.
+[MonoSuite sign-in](deploy/OAUTH.md) is implemented as an optional gateway around the viewer. It uses authorization codes with PKCE, verifies the identity at MonoSuite, and admits only explicitly approved account identifiers. It protects every data endpoint, including collection health and logs. Read the deployment guide for setup, session behavior, staff removal, and the verified provider URL gotcha.
 
-Observed in the API-key form: keys act as the creating account, scopes are fixed at creation, expiry is configurable with a never-expire option, and the secret is shown once. Changing scopes requires replacement. The public frontend calls the auth service's `/api/api-keys` endpoint using browser credentials. This is distinct from the dashboard GraphQL transport used by the CLI.
+Account approval grants access to all collected records, including PMs. The three requested OAuth read scopes do not create per-record restrictions in the local database. Atlas's approval list is independent of MonoSuite group roles; administrators must keep it current.
 
-Observed in the application form: other people can authorize an application through MonoSuite. Registration supports a confidential client with a secret held on your server, exact redirect-URI matching, HTTPS except for loopback development, a scope list, and optional description/website/privacy-policy URLs. Newly registered apps start unverified. The form says the client type cannot change after creation. Users approve permissions on a consent screen and can later revoke an application.
-
-The existing dashboard JWT worked for GraphQL but both settings lists returned `invalid token supplied` in the inspected session. The forms were readable. No API key was generated, no application was registered, and no authorization-code or refresh-token exchange was attempted. Do not assume that a newly issued API key or OAuth access token works with the CLI's raw Authorization header and dashboard realm just because the legacy JWT does. That compatibility is unverified.
-
-For this shared staff viewer, keep collection credentials independent of whoever has the page open. A verified, narrowly scoped API key would be a good collector credential if the GraphQL API accepts it. Candidate read scopes visible in the form include `moderation.note.view`, `moderation.warning.view`, and `moderation.blacklist.view`. The exact read permissions for online rosters and historical bans still need confirmation. Do not select `*`, `dashboard.*`, or a mutation-capable permission merely to make a failed read work.
-
-For a future MonoSuite login integration:
-
-1. Register a confidential application for the deployed origin with an exact callback URI. Registration must be performed separately; this project's read-only constraint excludes it.
-2. Obtain the documented authorization endpoint, token endpoint, client-auth method, supported scopes, PKCE requirements, refresh behavior, and identity response. The settings form does not establish these details. Do not invent OAuth URLs from the GraphQL URL or assume OIDC discovery exists.
-3. Implement authorization-code sign-in with state and PKCE, keep secrets and refresh tokens on the server, validate the returned identity, and issue an HttpOnly, Secure, SameSite session cookie. Rotate sessions and handle token revocation and logout.
-4. Check the user's current permission to view the configured Synapse group before returning either graph data or history. Being signed in to MonoSuite alone does not grant access. Decide how quickly local authorization must reflect permission removal.
-5. Verify that application/API-key access tokens can be supplied to `MonoSuiteClient` through its provider without changing the required realm/header conventions. If they cannot, request a supported authentication adapter upstream rather than bypassing the existing client.
-
-This is an integration design with verified UI facts, not a claim that MonoSuite OAuth is already wired up. The included password-protected deployment gives staff a usable web app while that protocol work is resolved.
+The collector still uses its own credential through `MonoSuiteClient`. OAuth login does not renew that credential. The API-key settings describe keys that act as their creator, fixed scopes, configurable expiry including no expiry, and a secret shown once. Compatibility of those keys or application tokens with the CLI's GraphQL realm/header remains unverified. Do not request wildcard or mutation-capable permissions to make a failed read work.
 
 ## Verification
 

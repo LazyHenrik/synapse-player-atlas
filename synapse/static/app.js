@@ -79,6 +79,7 @@ function params() {
 }
 async function read(url) {
   const r = await fetch(url);
+  if (r.status === 401) window.location.assign("/");
   const result = await r.json();
   if (!r.ok) throw new Error(result.error || "The request failed");
   return result;
@@ -804,4 +805,24 @@ document.querySelectorAll("[data-days]").forEach((b) =>
   }),
 );
 preset(7);
+read("/auth/session").then((session) => {
+  if (!session.enabled) return;
+  const button = $("sign-out");
+  button.hidden = false;
+  button.title = `Signed in as ${session.name}`;
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const response = await fetch("/auth/logout", {
+        method: "POST",
+        headers: { "X-CSRF-Token": session.csrf },
+      });
+      if (!response.ok) throw new Error("Sign-out failed");
+      window.location.assign("/");
+    } catch {
+      button.textContent = "Retry sign out";
+      button.disabled = false;
+    }
+  });
+}).catch(() => {});
 load();

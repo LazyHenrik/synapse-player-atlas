@@ -812,3 +812,11 @@ footer {
     font-size: 11px;
   }
 }
+ .auth-page {
+  max-width: 620px;
+  margin: 12vh auto;
+  padding: 32px;
+ }
+ .auth-page p { line-height: 1.7; }
+ .auth-link { display: inline-block; margin-top: 24px; color: #fff; }
+ [hidden] { display: none !important; }

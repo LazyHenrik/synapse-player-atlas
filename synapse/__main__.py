@@ -128,12 +128,27 @@ def main():
         from waitress import serve
         from .web import create_app
 
+        if os.environ.get(
+            "SYNAPSE_REQUIRE_AUTH", "false"
+        ).lower() == "true" and not os.environ.get("SYNAPSE_OAUTH_CONFIG"):
+            raise ValueError(
+                "OAuth is required; start with the OAuth Compose override and credential mount"
+            )
         with contextlib.closing(connect(args.db, readonly=True)) as db:
             if db.execute("PRAGMA user_version").fetchone()[0] != 2:
                 raise ValueError("Initialize a compatible database before serving")
         print(f"Synapse viewer: http://{args.host}:{args.port}", flush=True)
+        app = create_app(args.db)
+        if os.environ.get("SYNAPSE_OAUTH_CONFIG"):
+            from .auth import Auth
+
+            app = Auth(
+                app,
+                os.environ["SYNAPSE_OAUTH_CONFIG"],
+                os.environ.get("SYNAPSE_AUTH_DB", "/auth/sessions.sqlite"),
+            )
         serve(
-            create_app(args.db),
+            app,
             host=args.host,
             port=args.port,
             threads=4,
