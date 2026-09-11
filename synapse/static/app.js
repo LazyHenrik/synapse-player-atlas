@@ -430,7 +430,10 @@ function updateTransform() {
 function updateLabels() {
   if (!world?._positions) return;
   const occupied = [];
-  const size = 12 / Math.sqrt(transform.k);
+  const matrix = $("graph").getScreenCTM();
+  const viewportScale = Math.hypot(matrix.a, matrix.b) || 1;
+  const size =
+    (12 * Math.sqrt(Math.max(1, transform.k))) / (transform.k * viewportScale);
   const nodes = [...world._positions.values()].sort(
     (a, b) =>
       Number(b.id === hovered || b.id === selected) -
@@ -438,7 +441,7 @@ function updateLabels() {
   );
   for (const node of nodes) {
     node.label.style.fontSize = `${size}px`;
-    node.label.style.strokeWidth = `${3 / transform.k}px`;
+    node.label.style.strokeWidth = `${3 / (transform.k * viewportScale)}px`;
     const x = transform.x + (node.x + node.r + 5) * transform.k;
     const y = transform.y + node.y * transform.k;
     const box = [
@@ -578,6 +581,7 @@ function highlight() {
   updateLabels();
 }
 $("network-density").addEventListener("change", highlight);
+new ResizeObserver(updateLabels).observe($("graph"));
 async function showPlayer(id) {
   selected = id;
   highlight();

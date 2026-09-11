@@ -149,7 +149,7 @@ def explore_logs(
             else min(2, len(players)) if match == "between" else 1
         )
         clauses.append(
-            f"(SELECT count(*) FROM log_participants p WHERE p.log_id=l.id AND p.player_id IN ({marks}))>=?"
+            f"l.id IN (SELECT p.log_id FROM log_participants p WHERE p.player_id IN ({marks}) GROUP BY p.log_id HAVING count(*)>=?)"
         )
         values.extend(players)
         values.append(needed)
