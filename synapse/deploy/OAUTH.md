@@ -40,11 +40,15 @@ The extra capabilities are used only for that one-time volume initialization. Th
 
 ## Approve staff
 
-An empty `allowed_subjects` list admits nobody. A successful MonoSuite login for an unapproved account displays its verified account identifier on the access-approval page. Confirm the person and add that exact identifier to the server-side list. Never auto-approve the first person to log in. Account identifiers come from the OAuth identity endpoint's `sub`, not a display name or an unverified decoded token.
+Set `owner_subjects` in `client.json` to an explicit list of verified MonoSuite account identifiers belonging to the people who manage Atlas access. For example, add `"owner_subjects": ["YOUR_VERIFIED_ACCOUNT_ID"]`. Obtain the identifier by signing in and checking the approval page. Never automatically promote the first visitor. Owner accounts can enter Atlas and manage access even if absent from `allowed_subjects`.
 
-Every approved account can read the entire collected dataset, including PMs. This is an explicit Atlas staff list, not an automatic mirror of MonoSuite group roles. Remove staff from this list when they should lose access; changing their MonoSuite role alone does not remove Atlas access. The list is re-read for every request, and malformed or unreadable configuration denies access.
+Owners see **Manage access** in the Atlas header, linking to `/admin/access`. Unapproved visitors who successfully sign in automatically create a pending request with their verified account identifier and display name. Owners can approve or deny requests, revoke existing access, and restore denied or revoked accounts. Newly approved staff sign in again. Display names are not unique: verify the account identifier when deciding.
 
-Use an atomic file replacement when editing, preserving ownership and permissions. Because the directory is mounted, a replacement file becomes visible without recreating the container. Changes to the client ID, secret, or callback require a viewer restart.
+Approved staff can read the entire collected dataset, including PMs. Staff approval does not grant permission to manage other users. This is an explicit Atlas decision, not a mirror of MonoSuite group roles.
+
+Requests, decisions, and an audit trail of who changed access are persisted in the authentication database. Revocation invalidates all local sessions immediately and overrides the legacy `allowed_subjects` list. Repeat sign-ins do not reset denied or revoked decisions. Existing allowed staff remain supported and appear in the portal. Owners can only be changed through server configuration, preventing accidental owner lockout in the portal.
+
+Configuration is re-read on every request and malformed or unreadable configuration denies access. Use atomic replacement preserving ownership and permissions. Client ID, secret, or callback changes require a viewer restart. With both access lists empty and no portal approvals, nobody is admitted.
 
 ## Sessions and secrets
 

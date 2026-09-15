@@ -111,6 +111,97 @@ class AuthTests(unittest.TestCase):
         self.inner.assert_not_called()
         self.assertIn(b"Sign in with MonoSuite", self.request()["body"])
 
+    def decision(self, cookie, subject, action, **extra):
+        csrf = json.loads(self.request("/auth/session", cookie)["body"])["csrf"]
+        body = urlencode(dict(subject=subject, action=action, csrf=csrf)).encode()
+        return self.request(
+            "/admin/access",
+            cookie,
+            "POST",
+            **{
+                "HTTP_ORIGIN": self.app.origin,
+                "CONTENT_LENGTH": str(len(body)),
+                "wsgi.input": io.BytesIO(body),
+                **extra,
+            }
+        )
+
+    def test_owner_approval_and_immediate_revocation(self):
+        self.settings["owner_subjects"] = ["owner"]
+        self.save_config()
+        owner = self.login()
+        self.provider.identity.return_value = {
+            "sub": "staff",
+            "name": "<script>alert(1)</script>",
+        }
+        for _ in range(2):
+            query, flow = self.begin()
+            self.assertEqual(self.finish(query, flow)["status"], "403 Forbidden")
+        portal = self.request("/admin/access", owner)
+        self.assertIn(b"Pending requests (1)", portal["body"])
+        self.assertNotIn(b"<script>", portal["body"])
+        self.assertEqual(
+            self.decision(
+                owner, "staff", "approved", HTTP_ORIGIN="https://evil.example"
+            )["status"],
+            "403 Forbidden",
+        )
+        self.assertFalse(self.app.allowed("staff"))
+        self.assertEqual(
+            self.decision(owner, "staff", "approved")["status"], "303 See Other"
+        )
+        staff = self.login()
+        self.assertEqual(self.request("/api/logs", staff)["status"], "200 OK")
+        self.assertEqual(
+            self.request("/admin/access", staff)["status"], "403 Forbidden"
+        )
+        self.assertEqual(
+            self.decision(staff, "owner", "revoked")["status"], "403 Forbidden"
+        )
+        self.assertEqual(
+            self.decision(owner, "owner", "revoked")["status"], "403 Forbidden"
+        )
+        self.assertEqual(
+            self.decision(owner, "staff", "revoked")["status"], "303 See Other"
+        )
+        self.assertEqual(self.request("/api/logs", staff)["status"], "401 Unauthorized")
+        self.app.request_access("staff", "Staff")
+        self.assertFalse(self.app.allowed("staff"))
+        with self.app.db() as db:
+            self.assertEqual(
+                db.execute("SELECT count(*) FROM access_audit").fetchone()[0], 2
+            )
+
+    def test_deny_and_legacy_revoke_survive_restart(self):
+        self.settings["owner_subjects"] = ["owner"]
+        self.settings["allowed_subjects"].append("legacy")
+        self.save_config()
+        cookie = self.login()
+        self.app.request_access("new", "New")
+        self.assertEqual(
+            self.decision(cookie, "new", "denied")["status"], "303 See Other"
+        )
+        self.assertEqual(
+            self.decision(cookie, "legacy", "revoked")["status"], "303 See Other"
+        )
+        self.app = Auth(
+            self.inner,
+            self.config,
+            self.path / "auth.sqlite",
+            provider=self.provider,
+            clock=lambda: self.now,
+        )
+        self.assertFalse(self.app.allowed("new"))
+        self.assertFalse(self.app.allowed("legacy"))
+        self.assertEqual(
+            self.decision(cookie, "new", "approved")["status"], "303 See Other"
+        )
+        self.assertTrue(self.app.allowed("new"))
+        self.config.write_text('{"allowed_subjects": null}')
+        self.assertEqual(
+            self.request("/api/logs", cookie)["status"], "503 Service Unavailable"
+        )
+
     def test_pkce_state_and_browser_binding(self):
         query, cookie = self.begin()
         self.assertEqual(query["code_challenge_method"], ["S256"])

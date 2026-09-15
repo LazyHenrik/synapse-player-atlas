@@ -1011,6 +1011,7 @@ preset(7);
 read("/auth/session")
   .then((session) => {
     if (!session.enabled) return;
+    $("manage-access").hidden = !session.owner;
     const button = $("sign-out");
     button.hidden = false;
     button.title = `Signed in as ${session.name}`;

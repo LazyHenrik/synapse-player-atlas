@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.request
 from http.cookies import SimpleCookie
+from .access import Access
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
@@ -90,7 +91,7 @@ class Provider:
         return self.request("userinfo", token=token)
 
 
-class Auth:
+class Auth(Access):
     def __init__(self, app, config_path, store_path, provider=None, clock=time.time):
         self.app = app
         self.config_path = Path(config_path)
@@ -144,6 +145,7 @@ class Auth:
                     expires REAL NOT NULL, checked REAL NOT NULL, csrf TEXT NOT NULL
                 );
             """)
+        self.init_access()
         os.chmod(self.store_path, 0o600)
 
     @contextlib.contextmanager
@@ -155,12 +157,6 @@ class Auth:
                 yield connection
         finally:
             connection.close()
-
-    def allowed(self, subject):
-        # Re-read on every request so removing a staff account takes effect immediately.
-        config = json.loads(self.config_path.read_text())
-        allowed = config.get("allowed_subjects", [])
-        return isinstance(allowed, list) and subject in allowed
 
     def cookie(self, name, value, age):
         return (
@@ -307,10 +303,11 @@ class Auth:
         subject, name = self.identity(tokens)
         expires = self.token_expiry(tokens)
         if not self.allowed(subject):
+            message = self.request_access(subject, name)
             return self.page(
                 start_response,
                 "Access needs approval",
-                f"You signed in successfully, but this account has not been added to Synapse Player Atlas. Ask the administrator to approve account {subject}.",
+                message,
                 "403 Forbidden",
             )
         session = secrets.token_urlsafe(32)
@@ -414,7 +411,7 @@ class Auth:
                     "/synapse-wordmark.webp",
                 }:
                     return self.app(environ, start_response)
-            elif method != "POST" or route != "/auth/logout":
+            elif method != "POST" or route not in {"/auth/logout", "/admin/access"}:
                 return self.respond(
                     start_response, "405 Method Not Allowed", {"error": "Read only"}
                 )
@@ -452,11 +449,18 @@ class Auth:
                     {"ok": True},
                     [self.cookie(self.session_cookie, "", 0)],
                 )
+            if route == "/admin/access":
+                return self.admin(environ, start_response, session)
             if route == "/auth/session":
                 return self.respond(
                     start_response,
                     "200 OK",
-                    {"enabled": True, "name": session["name"], "csrf": session["csrf"]},
+                    {
+                        "enabled": True,
+                        "name": session["name"],
+                        "csrf": session["csrf"],
+                        "owner": self.is_owner(session["subject"]),
+                    },
                 )
             return self.app(environ, start_response)
         except LoginError:
