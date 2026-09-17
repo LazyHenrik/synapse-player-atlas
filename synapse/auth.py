@@ -172,7 +172,10 @@ class Auth(Access):
         except Exception:
             return {}
 
-    def respond(self, start_response, status, data, extra=(), mime="application/json"):
+    def respond(
+        self, start_response, status, data, extra=(), mime="application/json",
+        referrer_policy="no-referrer",
+    ):
         body = data.encode() if isinstance(data, str) else json.dumps(data).encode()
         start_response(
             status,
@@ -180,7 +183,7 @@ class Auth(Access):
                 ("Content-Type", mime),
                 ("Content-Length", str(len(body))),
                 ("Cache-Control", "no-store"),
-                ("Referrer-Policy", "no-referrer"),
+                ("Referrer-Policy", referrer_policy),
                 ("X-Content-Type-Options", "nosniff"),
                 ("X-Frame-Options", "DENY"),
                 (
@@ -202,7 +205,7 @@ class Auth(Access):
             message
             or "Sign in with MonoSuite to explore Synapse’s player relationships. Access is limited to approved staff."
         )
-        body = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synapse · Sign in</title><link rel="stylesheet" href="/style.css"></head><body><main class="auth-page"><img src="/synapse-wordmark.webp" alt="Project Synapse" width="220"><p class="eyebrow">PLAYER ATLAS</p><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a class="auth-link" href="/auth/login">Sign in with MonoSuite →</a></main></body></html>"""
+        body = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synapse · Sign in</title><link rel="stylesheet" href="/style.css"></head><body><main class="auth-page"><img src="/synapse-wordmark.webp" alt="Project Synapse" width="220"><p class="eyebrow">PLAYER ATLAS</p><h1>{html.escape(title)}</h1><p>{html.escape(message)}</p><a class="auth-link" href="/auth/login">Sign in with MonoSuite →</a><p>Not signed in to MonoSuite yet? <a href="https://monosuite.com/login" target="_blank" rel="noopener noreferrer">Open MonoSuite sign-in in a new tab</a>, finish signing in, then return to this tab and select “Sign in with MonoSuite” above.</p><p>If MonoSuite sends you to its dashboard, return to Atlas and try the sign-in button again. This starts a fresh, secure connection to Atlas.</p></main></body></html>"""
         return self.respond(
             start_response, status, body, mime="text/html; charset=utf-8"
         )

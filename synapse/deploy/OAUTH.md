@@ -56,6 +56,8 @@ Sessions expire after eight hours, survive a viewer restart, and are rechecked a
 
 Cookies are HttpOnly and SameSite=Lax. HTTPS uses Secure cookies with the `__Host-` prefix; the explicit loopback development configuration uses HTTP cookies. The app checks the configured Host instead of trusting forwarded headers. Caddy must preserve the public Host.
 
+Let the application set `Referrer-Policy`; do not override it in Caddy. The owner portal uses `same-origin` so native approval forms send the origin required by CSRF validation. Other authentication responses, including callbacks, use `no-referrer` to keep authorization query strings private. Setting `no-referrer` globally can make browser form submissions send `Origin: null` and fail with `Invalid access decision`.
+
 Sign out deletes the local session and stored tokens. It does not sign out of MonoSuite or withdraw the application grant. Users can withdraw that grant in MonoSuite's application settings. Session storage contains access and refresh tokens in the separate `synapse_authentication` volume, with a mode-700 directory and mode-600 database. It is not encrypted at rest; host administrators can read it. Treat backups of that volume as credentials. Observation backups do not include it.
 
 Do not enable access logs containing callback query strings or log provider response bodies. The application deliberately returns generic provider errors so authorization codes and tokens do not end up in logs or error pages.
@@ -67,6 +69,8 @@ Add the exact HTTPS callback to the registered MonoSuite application, update `re
 Verify the full consent/callback flow, Secure cookies, sign out, and rejection of unauthenticated `/api/graph` and `/api/logs`. The temporary loopback callback does not make the app publicly accessible.
 
 ## Provider findings
+
+Checked on 2026-09-17: when a visitor is signed out of MonoSuite, its authorization flow lands on `https://monosuite.com/login` without a return destination. Completing provider login can therefore land on the MonoSuite dashboard instead of invoking the Atlas callback. Atlas's sign-in page offers a separate-tab MonoSuite login: finish that login, return to Atlas, and use its sign-in button to start a fresh authorization request. This is a workaround for the provider's lost continuation, not an automatic callback repair. Do not reuse an old callback URL or weaken state/cookie validation. A seamless first-time sign-in requires MonoSuite to preserve the pending authorization request through its login flow.
 
 Checked on 2026-09-11: [OAuth discovery](https://auth.monosuite.com/.well-known/oauth-authorization-server) advertises authorization codes, refresh tokens, S256 PKCE, and `client_secret_basic`/`client_secret_post`. It incorrectly duplicates `/api` in its endpoint URLs: those routes return 404. The working routes are under `https://auth.monosuite.com/api/oauth/`: `authorize`, `token`, and `userinfo`. The integration pins these verified routes and refuses HTTP redirects when sending credentials. OpenID discovery returns 404; this is OAuth with a verified identity endpoint, not an assumed OIDC/JWT implementation.
 

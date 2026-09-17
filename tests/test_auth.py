@@ -146,6 +146,10 @@ class AuthTests(unittest.TestCase):
             )["status"],
             "403 Forbidden",
         )
+        self.assertEqual(
+            self.decision(owner, "staff", "approved", HTTP_ORIGIN="null")["status"],
+            "403 Forbidden",
+        )
         self.assertFalse(self.app.allowed("staff"))
         self.assertEqual(
             self.decision(owner, "staff", "approved")["status"], "303 See Other"
@@ -171,6 +175,15 @@ class AuthTests(unittest.TestCase):
             self.assertEqual(
                 db.execute("SELECT count(*) FROM access_audit").fetchone()[0], 2
             )
+
+    def test_owner_portal_uses_same_origin_referrer_policy(self):
+        self.settings["owner_subjects"] = ["owner"]
+        self.save_config()
+        owner = self.login()
+        result = self.request("/admin/access", owner)
+        self.assertEqual(
+            dict(result["headers"])["Referrer-Policy"], "same-origin"
+        )
 
     def test_deny_and_legacy_revoke_survive_restart(self):
         self.settings["owner_subjects"] = ["owner"]
@@ -211,6 +224,17 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(self.finish(query, cookie)["status"], "303 See Other")
         self.assertEqual(self.finish(query, cookie)["status"], "400 Bad Request")
         self.assertEqual(self.provider.exchange.call_count, 1)
+
+    def test_login_retry_after_provider_dashboard_starts_fresh_flow(self):
+        first, first_cookie = self.begin()
+        retry, retry_cookie = self.begin()
+        self.assertNotEqual(first["state"], retry["state"])
+        self.assertEqual(self.finish(first, retry_cookie)["status"], "400 Bad Request")
+        self.provider.exchange.assert_not_called()
+        result = self.finish(retry, retry_cookie)
+        self.assertEqual(result["status"], "303 See Other")
+        self.assertEqual(dict(result["headers"])["Location"], "/")
+        self.assertEqual(dict(result["headers"])["Referrer-Policy"], "no-referrer")
 
     def test_expired_and_duplicate_state_are_rejected(self):
         query, cookie = self.begin()

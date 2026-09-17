@@ -180,5 +180,7 @@ class Access:
             + "</main></body></html>"
         )
         return self.respond(
-            start_response, "200 OK", body, mime="text/html; charset=utf-8"
+            start_response, "200 OK", body, mime="text/html; charset=utf-8",
+            # Native form POSTs otherwise send Origin: null in browsers.
+            referrer_policy="same-origin",
         )
